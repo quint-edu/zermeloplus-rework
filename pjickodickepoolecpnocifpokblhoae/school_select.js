@@ -1,5 +1,6 @@
 let accessToken = null;
 let schoolName = null;
+let projects = [];
 
 document.addEventListener("DOMContentLoaded", () => {
     initTheme();
@@ -7,6 +8,11 @@ document.addEventListener("DOMContentLoaded", () => {
         setTheme(event.target.value);
         chrome.storage.sync.set({theme: event.target.value});
     });
+
+    const schoolSelect = document.getElementById("school-select");
+    const yearSelect = document.getElementById("year-select");
+    const continueButton = document.getElementById("continue-btn");
+    const errorMessage = document.getElementById("error-msg");
 
     chrome.storage.sync.get(["accessToken", "schoolName"], async result => {
         accessToken = result.accessToken;
@@ -16,23 +22,27 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
-        const schoolSelect = document.getElementById("school-select");
-        const yearSelect = document.getElementById("year-select");
         try {
-            const schools = await getSchools();
-            schools.forEach(school => schoolSelect.add(new Option(school.name, school.id)));
-            await onSchoolSelect(schoolSelect, yearSelect);
-            schoolSelect.addEventListener("change", () => onSchoolSelect(schoolSelect, yearSelect));
+            projects = await getProjects();
+            if(projects.length === 0) {
+                throw new Error("Er zijn geen roosters beschikbaar voor deze koppeling.");
+            }
+            populateSchools(schoolSelect);
+            updateYears(schoolSelect, yearSelect);
+            schoolSelect.addEventListener("change", () => updateYears(schoolSelect, yearSelect));
+            continueButton.addEventListener("click", () => {
+                if(!yearSelect.value) return;
+                continueButton.disabled = true;
+                chrome.storage.sync.set({schoolYear: yearSelect.value}, redirectMain);
+            });
         } catch(error) {
-            console.error("Unable to load schools:", error);
-            schoolSelect.add(new Option("Scholen konden niet worden geladen", ""));
+            console.error("Unable to load school years:", error);
+            errorMessage.textContent = error.message || "De roosters konden niet worden geladen.";
+            errorMessage.hidden = false;
             schoolSelect.disabled = true;
+            yearSelect.disabled = true;
+            continueButton.disabled = true;
         }
-
-        document.getElementById("continue-btn").addEventListener("click", () => {
-            if(!yearSelect.value) return;
-            chrome.storage.sync.set({schoolYear: yearSelect.value}, redirectMain);
-        });
     });
 });
 
@@ -63,26 +73,53 @@ async function apiRequest(path) {
         headers: {Authorization: accessToken}
     });
     const payload = await response.json().catch(() => ({}));
-    if(!response.ok) throw new Error(payload.message || payload.error || `API-fout (${response.status})`);
-    return payload.response?.data || payload.data || [];
+    if(!response.ok) {
+        throw new Error(payload.response?.message || payload.message || payload.error || `API-fout (${response.status})`);
+    }
+    return payload.response?.data || payload.data || payload.response || payload;
 }
 
-async function getSchools() {
-    return apiRequest("/schools?fields=id,name");
+async function getProjects() {
+    const partnerInfo = await apiRequest("/partners/~me");
+    const candidates = findProjectArrays(partnerInfo);
+    const byId = new Map();
+    candidates.flat().forEach(project => {
+        if(typeof project === "string" || typeof project === "number") {
+            project = {id: project};
+        }
+        const id = project?.id || project?.schoolInSchoolYear || project?.schoolInSchoolYearId;
+        if(id && !byId.has(String(id))) {
+            byId.set(String(id), {
+                id: String(id),
+                name: project.name || project.schoolName || project.projectName || "Rooster " + id,
+                year: Number(project.year || project.schoolYear || project.schoolyear || 0),
+                school: project.schoolName || project.school || project.name || "School"
+            });
+        }
+    });
+    return Array.from(byId.values()).sort((a, b) => b.year - a.year || a.name.localeCompare(b.name));
 }
 
-async function onSchoolSelect(schoolSelect, yearSelect) {
-    if(!schoolSelect.value) return;
-    const years = await getYears(schoolSelect.value);
-    yearSelect.replaceChildren(...years.filter(year => !year.archived)
-        .map(year => new Option(year.name, year.id)));
+function findProjectArrays(value, key = "") {
+    if(!value || typeof value !== "object") return [];
+    if(Array.isArray(value)) {
+        return key.toLowerCase().includes("school") || key.toLowerCase().includes("project")
+            ? [value]
+            : value.flatMap(item => findProjectArrays(item, key));
+    }
+    return Object.entries(value).flatMap(([childKey, childValue]) =>
+        findProjectArrays(childValue, childKey)
+    );
 }
 
-function getYears(school) {
-    return apiRequest("/schoolsinschoolyears?fields=id,name,year,archived&school=" + encodeURIComponent(school))
-        .then(sortYears);
+function populateSchools(schoolSelect) {
+    const schools = Array.from(new Map(projects.map(project => [project.school, project.school])).values());
+    schoolSelect.replaceChildren(...schools.map(school => new Option(school, school)));
 }
 
-function sortYears(years) {
-    return years.slice().sort((a, b) => b.year - a.year);
+function updateYears(schoolSelect, yearSelect) {
+    const matchingProjects = projects.filter(project => project.school === schoolSelect.value);
+    yearSelect.replaceChildren(...matchingProjects.map(project =>
+        new Option(project.year ? String(project.year) : project.name, project.id)
+    ));
 }
