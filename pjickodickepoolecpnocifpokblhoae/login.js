@@ -1,114 +1,104 @@
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener("DOMContentLoaded", () => {
     initTheme();
-    let loginCodeElement = document.getElementById("login-code");
-    let schoolNameElement = document.getElementById("school-name");
-    let loginBtn = document.getElementById("login-btn");
-    let autoFillBtn = document.getElementById("auto-fill-btn");
 
-    let errorText = document.getElementById("error-msg");
+    const loginCodeElement = document.getElementById("login-code");
+    const schoolNameElement = document.getElementById("school-name");
+    const loginButton = document.getElementById("login-btn");
+    const errorText = document.getElementById("error-msg");
+
     document.getElementById("theme-select").addEventListener("change", event => {
         setTheme(event.target.value);
         chrome.storage.sync.set({theme: event.target.value});
     });
 
-    loginCodeElement.addEventListener("keypress", function(e) {
-        if(loginCodeElement.value.length >= 12 || isLetter(e.keyCode)) {
-            e.preventDefault();
-        }
+    loginCodeElement.addEventListener("input", () => {
+        loginCodeElement.value = loginCodeElement.value.replace(/\D/g, "").slice(0, 12);
     });
 
-    loginBtn.addEventListener("click", function() {
-        loginBtn.disabled = true;
+    loginButton.addEventListener("click", async () => {
+        const loginCode = loginCodeElement.value.trim();
+        const schoolName = schoolNameElement.value.trim();
+
         errorText.hidden = true;
-
-        let loginCode = loginCodeElement.value;
-        let schoolName = schoolNameElement.value;
-
-        let url = "https://" + encodeURI(schoolName) + ".zportal.nl/api/v2/oauth/token";
-        fetch(url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded'
-            },
-            body: 'grant_type=authorization_code&code=' + encodeURI(loginCode)
-        }).then(response => {
-            if(!response.ok) {
-                throw new Error(response.statusText);
-            }
-            return response.json();
-        }).then(response => {
-            let accessToken = response.access_token;
-            getUserInfo(schoolName, accessToken).then(userInfo => {
-                saveData(schoolName, accessToken, userInfo);
-            });
-        }).catch(error => {
-            console.log("Request error: " + error);
-            loginBtn.disabled = false;
+        if(!schoolName || loginCode.length !== 12) {
+            errorText.textContent = "Vul je schoolnaam en de 12-cijferige login code in.";
             errorText.hidden = false;
-        });
-
-        function initTheme() {
-            chrome.storage.sync.get(["theme"], result => setTheme(result.theme || "system"));
-        }
-
-        function setTheme(theme) {
-            document.documentElement.dataset.theme = theme === "system"
-                ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
-                : theme;
-            document.getElementById("theme-select").value = theme;
-        }
-    });
-
-   /* chrome.tabs.getSelected(null, function(tab) {
-        let re = /^\S+.zportal.nl\/main\/#connectionsModule-connectApp$/;
-        if(!tab.url.match(re)) {
             return;
         }
 
-        autoFillBtn.style.display = "block";
-        autoFillBtn.addEventListener("click", function() {
-            chrome.tabs.executeScript(null, {code: '(' + zermeloInject + ')();'}, function(result) {
-                schoolNameElement.value = result[0]["schoolName"];
-                loginCodeElement.value = result[0]["loginCode"];
+        loginButton.disabled = true;
+        try {
+            const tokenResponse = await fetch(
+                "https://" + encodeURIComponent(schoolName) + ".zportal.nl/api/oauth/token?code=" + encodeURIComponent(loginCode),
+                {method: "POST"}
+            );
+            const tokenPayload = await readApiResponse(tokenResponse);
+            const accessToken = tokenPayload.access_token
+                || tokenPayload.token
+                || tokenPayload.response?.access_token
+                || tokenPayload.response?.data?.[0]?.access_token
+                || tokenPayload.response?.data?.[0]?.token;
+            if(!accessToken) throw new Error("De API gaf geen token terug.");
+
+            const userInfo = await getUserInfo(schoolName, accessToken).catch(error => {
+                console.warn("User profile is unavailable until a school year is selected:", error);
+                return {firstName: "daar", lastName: ""};
             });
-        });
-    });*/
+            await saveData(schoolName, accessToken, userInfo);
+        } catch(error) {
+            console.error("Login failed:", error);
+            errorText.textContent = error.message || "Inloggen mislukt, probeer het opnieuw.";
+            errorText.hidden = false;
+            loginButton.disabled = false;
+        }
+    });
 });
 
-function zermeloInject() {
-    let loginCode = document.getElementById("isc_8E").childNodes[0].childNodes[0].childNodes[0].childNodes[0].innerHTML.replace(/ /g, "");
-    let schoolName = document.getElementById("isc_8C").childNodes[0].childNodes[0].childNodes[0].childNodes[0].innerHTML;
+function initTheme() {
+    chrome.storage.sync.get(["theme"], result => setTheme(result.theme || "system"));
+}
 
-    return {schoolName, loginCode};
+function setTheme(theme) {
+    const resolvedTheme = theme === "system"
+        ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+        : theme;
+    document.documentElement.dataset.theme = resolvedTheme;
+    document.getElementById("theme-select").value = theme;
+}
+
+async function readApiResponse(response) {
+    const payload = await response.json().catch(() => ({}));
+    if(!response.ok) {
+        throw new Error(payload.message || payload.error || `API-fout (${response.status})`);
+    }
+    return payload;
 }
 
 function redirectMain() {
-    chrome.action.setPopup({
-        popup: "popup.html"
-    });
+    chrome.action.setPopup({popup: "popup.html"});
     window.location.href = "popup.html";
 }
 
-function saveData(schoolName, authorizationCode, userInfo) {
-    chrome.storage.sync.set({
-        "accessToken": authorizationCode,
-        "schoolName": schoolName,
-        "userInfo": userInfo
-    }, function() {
-        redirectMain();
+function saveData(schoolName, accessToken, userInfo) {
+    return new Promise((resolve, reject) => {
+        chrome.storage.sync.set({accessToken, schoolName, userInfo}, () => {
+            if(chrome.runtime.lastError) {
+                reject(new Error(chrome.runtime.lastError.message));
+                return;
+            }
+            redirectMain();
+            resolve();
+        });
     });
 }
 
-function isLetter(keyCode) {
-    return keyCode > 31 && (keyCode < 48 || keyCode > 57);
-}
-
-function getUserInfo(siteName, accessToken) {
-    let url = "https://" + siteName + ".zportal.nl/api/v3/users/~me?access_token=" + accessToken;
-
-    return fetch(url).then(r => r.json()).then(result => {
-        let data = result.response.data[0];
-        data.fullName = data.firstName + " " + data.lastName;
-        return data;
-    });
+async function getUserInfo(siteName, accessToken) {
+    const url = "https://" + encodeURIComponent(siteName)
+        + ".zportal.nl/api/users/~me?fields=firstName,lastName,userCode";
+    const response = await fetch(url, {headers: {Authorization: accessToken}});
+    const payload = await readApiResponse(response);
+    const data = payload.response?.data?.[0] || payload.data?.[0] || payload.data || payload;
+    if(!data?.firstName) throw new Error("De gebruikersgegevens konden niet worden opgehaald.");
+    data.fullName = [data.firstName, data.lastName].filter(Boolean).join(" ");
+    return data;
 }

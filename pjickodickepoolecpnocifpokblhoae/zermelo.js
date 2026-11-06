@@ -235,10 +235,12 @@ function retrieveTeachers() {
     console.log("Retrieving teachers...");
 
     let url = getZermeloDomain()
-            + "/users?archived=false&schoolInSchoolYear=" + schoolYear + "&fields=code%2ClastName%2Cprefix&isEmployee=true&access_token=" + accessToken;
+            + "/users?archived=false&schoolInSchoolYear=" + encodeURIComponent(schoolYear)
+            + "&fields=code%2ClastName%2Cprefix&isEmployee=true";
 
-    return fetch(url).then(r => r.json()).then(result => {
-        let teachers = result.response.data;
+    return fetch(url, {headers: {Authorization: accessToken}})
+    .then(r => readApiResponse(r)).then(result => {
+        let teachers = result;
         teachers.forEach(teacher => {
             let prefix = teacher.prefix;
             let lastName = teacher.lastName;
@@ -267,10 +269,13 @@ function retrieveSchedule() {
     let endTime = startTime + 86400;
 
     let url = getZermeloDomain()
-                + "/appointments?user=~me&access_token=" + accessToken + "&start=" + startTime + "&end=" + endTime;
+                + "/appointments?user=~me&schoolInSchoolYear=" + encodeURIComponent(schoolYear)
+                + "&fields=appointmentInstance%2Ccancelled%2Ccontent%2Cend%2Cgroups%2Clocations%2Cstart%2Csubjects%2Cteachers%2Cvalid"
+                + "&start=" + startTime + "&end=" + endTime;
 
-    fetch(url).then(r => r.json()).then(result => {
-        appointmentsToday = sortAppointments(result.response.data);
+    fetch(url, {headers: {Authorization: accessToken}})
+    .then(r => readApiResponse(r)).then(result => {
+        appointmentsToday = sortAppointments(result);
 
         if(appointmentsToday.length != 0) {
             dayStartTime = appointmentsToday[0].start;
@@ -283,6 +288,11 @@ function retrieveSchedule() {
         retrieveTeachers().then(result => {
             onLoadingFinished();
         });
+    }).catch(error => {
+        console.error("Schedule retrieval failed:", error);
+        document.getElementById("status-label").textContent = "Rooster niet beschikbaar";
+        document.getElementById("lesson-info").textContent = "Kan rooster niet laden";
+        document.getElementById("room-info").textContent = error.message;
     });
 }
 
@@ -379,7 +389,16 @@ function getUnixSeconds() {
 }
 
 function getZermeloDomain() {
-    return "https://" + encodeURI(schoolName) + ".zportal.nl/api/v3";
+    return "https://" + encodeURIComponent(schoolName) + ".zportal.nl/api";
+}
+
+function readApiResponse(response) {
+    return response.json().then(payload => {
+        if(!response.ok) {
+            throw new Error(payload.message || payload.error || `API-fout (${response.status})`);
+        }
+        return payload.response?.data || payload.data || [];
+    });
 }
 
 function translateArray(inputArray, translationArray) {
