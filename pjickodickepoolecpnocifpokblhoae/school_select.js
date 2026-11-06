@@ -2,6 +2,11 @@ let accessToken = null;
 let schoolName = null;
 
 document.addEventListener('DOMContentLoaded', () => {
+    initTheme();
+    document.getElementById("theme-select").addEventListener("change", event => {
+        setTheme(event.target.value);
+        chrome.storage.sync.set({theme: event.target.value});
+    });
     chrome.storage.sync.get(['accessToken', 'schoolName'], function(result) {
         accessToken = result.accessToken;
         schoolName = result.schoolName;
@@ -14,6 +19,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 option.value = school.id;
                 selectElement.add(option);
             });
+
+            function initTheme() {
+                chrome.storage.sync.get(["theme"], result => setTheme(result.theme || "system"));
+            }
+
+            function setTheme(theme) {
+                document.documentElement.dataset.theme = theme === "system"
+                    ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+                    : theme;
+                document.getElementById("theme-select").value = theme;
+            }
 
             onSchoolSelect(selectElement, yearSelectElement);
         });

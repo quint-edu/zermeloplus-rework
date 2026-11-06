@@ -2,8 +2,8 @@
 "update_url": "https://clients2.google.com/service/update2/crx",
 
 	"name": "Zermelo++",
-	"version": "1.0.3",
-	"description": "Integreert met Zermelo om actuele roosterinformatie te tonen",
+	"version": "1.1.0",
+	"description": "Een moderne, themable Chrome-extensie voor je actuele Zermelo-rooster",
 	"manifest_version": 3,
 	"permissions": [
 		"storage"

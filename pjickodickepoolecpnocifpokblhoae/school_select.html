@@ -1,14 +1,26 @@
 <!DOCTYPE html>
-<html>
+<html lang="nl">
     <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <link rel="stylesheet" href="login.css">
     </head>
     <body>
-        <h3>Selecteer je school en schooljaar</h3>
-
-        <select class="field" id="school-select"></select>
-        <select class="field" id="year-select"></select>
-        <button id="continue-btn">Ga verder</button>
+        <main class="page">
+            <header class="topbar">
+                <div class="brand"><img src="logo.png" alt=""><div><p class="eyebrow">Zermelo++</p><span class="muted">Bijna klaar</span></div></div>
+                <select class="theme-select" id="theme-select" aria-label="Thema"><option value="system">Auto</option><option value="light">Licht</option><option value="dark">Donker</option></select>
+            </header>
+            <section class="panel">
+                <h1>Kies je rooster</h1>
+                <p class="intro">Selecteer je school en het actieve schooljaar.</p>
+                <label class="field-label" for="school-select">School</label>
+                <select class="field" id="school-select"></select>
+                <label class="field-label" for="year-select">Schooljaar</label>
+                <select class="field" id="year-select"></select>
+                <button id="continue-btn" type="button">Doorgaan</button>
+            </section>
+        </main>
 
         <script src="school_select.js"></script>
     </body>

@@ -1,32 +1,100 @@
+:root {
+    color-scheme: light;
+    --bg: #f4f6fb;
+    --surface: #ffffff;
+    --surface-muted: #eef1f7;
+    --text: #172033;
+    --muted: #6d7688;
+    --border: #e4e8f0;
+    --accent: #ef3340;
+    --accent-soft: #fff0f1;
+    --success: #19a974;
+    --shadow: 0 12px 30px rgba(31, 41, 66, .10);
+}
+
+:root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #171a24;
+    --surface: #232735;
+    --surface-muted: #2d3242;
+    --text: #f4f6fb;
+    --muted: #a7afc0;
+    --border: #3a4052;
+    --accent: #ff5964;
+    --accent-soft: #43272d;
+    --success: #47d39b;
+    --shadow: 0 14px 30px rgba(0, 0, 0, .22);
+}
+
+* { box-sizing: border-box; }
+
 body {
-    width: 200px;
-    text-align: center;
+    width: 360px;
+    min-height: 480px;
+    margin: 0;
+    color: var(--text);
+    background: var(--bg);
+    font: 13px/1.45 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-#lesson-info, #room-info {
-    margin: 0px;
+button, select { font: inherit; }
+button { cursor: pointer; }
+
+.app-shell { padding: 18px; }
+.app-header, .status-row, .section-heading, .app-footer, .brand, .footer-actions { display: flex; align-items: center; }
+.app-header, .section-heading, .app-footer { justify-content: space-between; }
+.brand { gap: 10px; }
+.brand-mark { width: 34px; height: 34px; border-radius: 11px; }
+.eyebrow, .section-title { margin: 0; font-weight: 750; letter-spacing: -.01em; }
+.eyebrow { font-size: 15px; }
+.section-title { font-size: 13px; }
+.muted { color: var(--muted); margin: 2px 0 0; font-size: 11px; }
+
+.theme-picker select {
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    padding: 6px 8px;
+    background: var(--surface);
+    outline: none;
 }
 
-.subtext-small {
-    font-size: 10px;
-    margin-top: 0px;
-    margin-bottom: 0px;
+.hero-card, .progress-card, .upcoming-card {
+    margin-top: 16px;
+    padding: 17px;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
 }
 
-#day-time-left, #day-info {
-    margin-top: 0px;
-    margin-bottom: 0px;
-}
+.hero-card { background: linear-gradient(140deg, var(--surface), var(--accent-soft)); }
+.status-row { gap: 7px; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); }
+.status-dot.waiting { background: var(--accent); }
+.status-label { color: var(--muted); font-size: 11px; }
+.time-left { margin-left: auto; font-size: 20px; font-weight: 780; letter-spacing: -.04em; }
+.hero-title { margin: 20px 0 3px; font-size: 21px; font-weight: 780; letter-spacing: -.035em; }
+.hero-subtitle { min-height: 20px; margin: 0; color: var(--muted); }
+.badge { display: inline-block; margin: 13px 0 0; padding: 4px 8px; color: var(--accent); border-radius: 99px; background: var(--accent-soft); font-size: 10px; font-weight: 750; }
 
-#extra-info {
-    margin-top: 10px;
-    margin-bottom: 10px;
-}
+.progress-card { box-shadow: none; }
+.progress-card progress { width: 100%; height: 7px; margin-top: 14px; border: 0; border-radius: 99px; overflow: hidden; background: var(--surface-muted); }
+progress::-webkit-progress-bar { background: var(--surface-muted); border-radius: 99px; }
+progress::-webkit-progress-value { background: var(--accent); border-radius: 99px; }
 
-#time-left {
-	margin-bottom: 0px;
-}
+.upcoming-card { box-shadow: none; }
+.upcoming-list { margin-top: 10px; }
+.upcoming-item { display: flex; gap: 10px; padding: 10px 0; border-top: 1px solid var(--border); }
+.upcoming-item:first-child { border-top: 0; }
+.upcoming-time { min-width: 45px; color: var(--muted); font-size: 11px; }
+.upcoming-subject { margin: 0; font-weight: 700; }
+.upcoming-detail { margin: 2px 0 0; color: var(--muted); font-size: 11px; }
+.empty-state { margin: 8px 0 0; color: var(--muted); font-size: 11px; }
 
-#lesson-info {
-	margin-top: 15px;
-}
+.app-footer { margin-top: 18px; color: var(--muted); font-size: 11px; }
+.footer-actions { gap: 10px; }
+.text-button { padding: 0; color: var(--accent); border: 0; background: transparent; font-size: 11px; font-weight: 700; }
+.text-button:hover { text-decoration: underline; }
+.text-button.danger { color: var(--muted); }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }

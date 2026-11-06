@@ -1,20 +1,25 @@
 document.addEventListener('DOMContentLoaded', () => {
+    initTheme();
     let loginCodeElement = document.getElementById("login-code");
     let schoolNameElement = document.getElementById("school-name");
     let loginBtn = document.getElementById("login-btn");
     let autoFillBtn = document.getElementById("auto-fill-btn");
 
     let errorText = document.getElementById("error-msg");
+    document.getElementById("theme-select").addEventListener("change", event => {
+        setTheme(event.target.value);
+        chrome.storage.sync.set({theme: event.target.value});
+    });
 
     loginCodeElement.addEventListener("keypress", function(e) {
         if(loginCodeElement.value.length >= 12 || isLetter(e.keyCode)) {
             e.preventDefault();
         }
     });
-    
+
     loginBtn.addEventListener("click", function() {
         loginBtn.disabled = true;
-        errorText.style.display = 'none';
+        errorText.hidden = true;
 
         let loginCode = loginCodeElement.value;
         let schoolName = schoolNameElement.value;
@@ -39,8 +44,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }).catch(error => {
             console.log("Request error: " + error);
             loginBtn.disabled = false;
-            errorText.style.display = 'block';
+            errorText.hidden = false;
         });
+
+        function initTheme() {
+            chrome.storage.sync.get(["theme"], result => setTheme(result.theme || "system"));
+        }
+
+        function setTheme(theme) {
+            document.documentElement.dataset.theme = theme === "system"
+                ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+                : theme;
+            document.getElementById("theme-select").value = theme;
+        }
     });
 
    /* chrome.tabs.getSelected(null, function(tab) {

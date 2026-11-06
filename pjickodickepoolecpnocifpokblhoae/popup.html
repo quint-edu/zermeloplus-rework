@@ -1,25 +1,71 @@
 <!DOCTYPE html>
-<html>
+<html lang="nl">
     <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Zermelo++</title>
         <link rel="stylesheet" href="popup.css">
     </head>
     <body>
-        <h2 id="time-left"></h2>
-		<p id="notification-double-hour" class="subtext-small" style="display: none">(blokuur)</p>
-		
-        <p id="lesson-info"></p>
-        <p id="room-info"></p>
+        <main class="app-shell">
+            <header class="app-header">
+                <div class="brand">
+                    <img src="logo.png" alt="" class="brand-mark">
+                    <div>
+                        <p class="eyebrow">Zermelo++</p>
+                        <p class="muted" id="school-label">Vandaag</p>
+                    </div>
+                </div>
+                <label class="theme-picker" title="Thema">
+                    <span class="sr-only">Thema</span>
+                    <select id="theme-select" aria-label="Thema">
+                        <option value="system">Auto</option>
+                        <option value="light">Licht</option>
+                        <option value="dark">Donker</option>
+                    </select>
+                </label>
+            </header>
 
-        <div id="extra-info" style="display: none;">
-            <progress id="day-progress" value="0" max="100"></progress>
-            <p id="day-info"></p>
-            <p id="day-time-left"></p>
-        </div>
-        
-        <hr />
-        <p class="subtext-small">Hallo, <span id="username-span">...</span></p>
-        <p class="subtext-small"><a id="more-info-btn" href="#">Meer info</a> &middot; <a id="refresh-btn" href="#">Opnieuw laden</a> &middot; <a id="logout-btn" href="#">Uitloggen</a></p>
-        
+            <section class="hero-card" aria-live="polite">
+                <div class="status-row">
+                    <span class="status-dot" id="status-dot"></span>
+                    <span class="status-label" id="status-label">Laden...</span>
+                    <span class="time-left" id="time-left">--:--</span>
+                </div>
+                <p class="hero-title" id="lesson-info">Je rooster wordt geladen</p>
+                <p class="hero-subtitle" id="room-info">Even geduld...</p>
+                <p class="badge" id="notification-double-hour" hidden>Blokuur</p>
+            </section>
+
+            <section class="progress-card">
+                <div class="section-heading">
+                    <div>
+                        <p class="section-title">Vandaag</p>
+                        <p class="muted" id="day-info">Rooster laden...</p>
+                    </div>
+                    <p class="muted" id="day-time-left"></p>
+                </div>
+                <progress id="day-progress" value="0" max="100"></progress>
+            </section>
+
+            <section class="upcoming-card">
+                <div class="section-heading">
+                    <p class="section-title">Hierna</p>
+                    <button class="text-button" id="refresh-btn" type="button">Vernieuwen</button>
+                </div>
+                <div id="upcoming-list" class="upcoming-list">
+                    <p class="empty-state">Je lessen verschijnen hier.</p>
+                </div>
+            </section>
+
+            <footer class="app-footer">
+                <span>Hoi, <strong id="username-span">...</strong></span>
+                <div class="footer-actions">
+                    <button class="text-button" id="more-info-btn" type="button">Meer info</button>
+                    <button class="text-button danger" id="logout-btn" type="button">Uitloggen</button>
+                </div>
+            </footer>
+        </main>
         <script src="zermelo.js"></script>
     </body>
 </html>
