@@ -1,6 +1,5 @@
 let accessToken = null;
 let schoolName = null;
-let projects = [];
 
 document.addEventListener("DOMContentLoaded", () => {
     initTheme();
@@ -14,8 +13,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const continueButton = document.getElementById("continue-btn");
     const errorMessage = document.getElementById("error-msg");
     const loginAgainButton = document.getElementById("login-again-btn");
-
     loginAgainButton.addEventListener("click", redirectLogin);
+
     chrome.storage.sync.get(["accessToken", "schoolName"], async result => {
         accessToken = result.accessToken;
         schoolName = result.schoolName;
@@ -25,28 +24,25 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         try {
-            projects = await getProjects();
-            if(projects.length === 0) {
-                throw new Error("Er zijn geen roosters beschikbaar voor deze koppeling.");
-            }
-            populateSchools(schoolSelect);
-            updateYears(schoolSelect, yearSelect);
-            schoolSelect.addEventListener("change", () => updateYears(schoolSelect, yearSelect));
+            const schools = await getSchools();
+            schools.forEach(school => schoolSelect.add(new Option(school.name, school.id)));
+            if(schools.length === 0) throw new Error("Geen scholen gevonden.");
+
+            await onSchoolSelect(schoolSelect, yearSelect);
+            schoolSelect.addEventListener("change", () => onSchoolSelect(schoolSelect, yearSelect));
             continueButton.addEventListener("click", () => {
                 if(!yearSelect.value) return;
                 continueButton.disabled = true;
                 chrome.storage.sync.set({schoolYear: yearSelect.value}, redirectMain);
             });
         } catch(error) {
-            console.error("Unable to load school years:", error);
+            console.error("Unable to load schools:", error);
             errorMessage.textContent = error.message || "De roosters konden niet worden geladen.";
             errorMessage.hidden = false;
             schoolSelect.disabled = true;
             yearSelect.disabled = true;
             continueButton.disabled = true;
-            if(error.authenticated === false) {
-                loginAgainButton.hidden = false;
-            }
+            loginAgainButton.hidden = true;
         }
     });
 });
@@ -74,83 +70,30 @@ function redirectMain() {
     window.location.href = "popup.html";
 }
 
-async function apiRequest(path) {
-    const url = "https://" + encodeURIComponent(schoolName) + ".zportal.nl/api" + path;
-    const response = await fetch(url, {headers: {Authorization: accessToken}});
-    const payload = await response.json().catch(() => ({}));
-    if(response.ok && Number(payload.response?.status || 200) < 400) {
-        return payload.response?.data || payload.data || payload.response || payload;
-    }
-
-    const error = new Error(
-        getApiErrorMessage(payload, response.status)
-    );
-    if(isUnauthorized(response, payload)) {
-        error.authenticated = false;
-        error.message = "Zermelo weigert deze token. Log opnieuw in met een nieuwe authcode.";
-    }
-    throw error;
-}
-
-function getApiErrorMessage(payload, status) {
-    const response = payload?.response || {};
-    const message = response.message || payload?.message || payload?.error_description || payload?.error;
-    const details = response.details || payload?.details;
-    if(message && details && details !== message) return `${message} (${details})`;
-    return message || `API-fout (${status || "onbekend"})`;
-}
-
-function isUnauthorized(response, payload) {
-    return response.status === 401
-        || response.status === 403
-        || Number(payload.response?.status) === 401
-        || Number(payload.response?.status) === 403
-        || /niet ingelogd|sessie.*verlopen|unauthori[sz]ed|invalid token|geen toegang/i.test(
-            payload.response?.message || payload.response?.details || payload.message || payload.error || ""
-        );
-}
-
-async function getProjects() {
-    const partnerInfo = await apiRequest("/partners/~me");
-    const candidates = findProjectArrays(partnerInfo);
-    const byId = new Map();
-    candidates.flat().forEach(project => {
-        if(typeof project === "string" || typeof project === "number") {
-            project = {id: project};
-        }
-        const id = project?.id || project?.schoolInSchoolYear || project?.schoolInSchoolYearId;
-        if(id && !byId.has(String(id))) {
-            byId.set(String(id), {
-                id: String(id),
-                name: project.name || project.schoolName || project.projectName || "Rooster " + id,
-                year: Number(project.year || project.schoolYear || project.schoolyear || 0),
-                school: project.schoolName || project.school || project.name || "School"
-            });
-        }
-    });
-    return Array.from(byId.values()).sort((a, b) => b.year - a.year || a.name.localeCompare(b.name));
-}
-
-function findProjectArrays(value, key = "") {
-    if(!value || typeof value !== "object") return [];
-    if(Array.isArray(value)) {
-        return key.toLowerCase().includes("school") || key.toLowerCase().includes("project")
-            ? [value]
-            : value.flatMap(item => findProjectArrays(item, key));
-    }
-    return Object.entries(value).flatMap(([childKey, childValue]) =>
-        findProjectArrays(childValue, childKey)
-    );
-}
-
-function populateSchools(schoolSelect) {
-    const schools = Array.from(new Map(projects.map(project => [project.school, project.school])).values());
-    schoolSelect.replaceChildren(...schools.map(school => new Option(school, school)));
-}
-
-function updateYears(schoolSelect, yearSelect) {
-    const matchingProjects = projects.filter(project => project.school === schoolSelect.value);
-    yearSelect.replaceChildren(...matchingProjects.map(project =>
-        new Option(project.year ? String(project.year) : project.name, project.id)
+async function getSchools() {
+    const payload = await readApiResponse(await fetch(
+        "https://" + encodeURI(schoolName) + ".zportal.nl/api/v3/schools?access_token="
+        + encodeURIComponent(accessToken)
     ));
+    return payload.response.data;
+}
+
+async function onSchoolSelect(schoolSelect, yearSelect) {
+    const payload = await readApiResponse(await fetch(
+        "https://" + encodeURI(schoolName) + ".zportal.nl/api/v3/schoolsinschoolyears?access_token="
+        + encodeURIComponent(accessToken) + "&school=" + encodeURIComponent(schoolSelect.value)
+    ));
+    const years = payload.response.data.slice().sort((a, b) => b.year - a.year);
+    yearSelect.replaceChildren(...years.filter(year => !year.archived)
+        .map(year => new Option(year.name, year.id)));
+}
+
+async function readApiResponse(response) {
+    const payload = await response.json().catch(() => ({}));
+    if(!response.ok) {
+        const message = payload.message || payload.error_description || payload.error
+            || payload.response?.message;
+        throw new Error(message || `API-fout (${response.status})`);
+    }
+    return payload;
 }

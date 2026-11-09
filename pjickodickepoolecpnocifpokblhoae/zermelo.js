@@ -236,9 +236,9 @@ function retrieveTeachers() {
 
     let url = getZermeloDomain()
             + "/users?archived=false&schoolInSchoolYear=" + encodeURIComponent(schoolYear)
-            + "&fields=code%2ClastName%2Cprefix&isEmployee=true";
+            + "&fields=code%2ClastName%2Cprefix&isEmployee=true&access_token=" + encodeURIComponent(accessToken);
 
-    return fetch(url, {headers: {Authorization: accessToken}})
+    return fetch(url)
     .then(r => readApiResponse(r)).then(result => {
         let teachers = result;
         teachers.forEach(teacher => {
@@ -269,11 +269,10 @@ function retrieveSchedule() {
     let endTime = startTime + 86400;
 
     let url = getZermeloDomain()
-                + "/appointments?user=~me&schoolInSchoolYear=" + encodeURIComponent(schoolYear)
-                + "&fields=appointmentInstance%2Ccancelled%2Ccontent%2Cend%2Cgroups%2Clocations%2Cstart%2Csubjects%2Cteachers%2Cvalid"
+                + "/appointments?user=~me&access_token=" + encodeURIComponent(accessToken)
                 + "&start=" + startTime + "&end=" + endTime;
 
-    fetch(url, {headers: {Authorization: accessToken}})
+    fetch(url)
     .then(r => readApiResponse(r)).then(result => {
         appointmentsToday = sortAppointments(result);
 
@@ -389,7 +388,7 @@ function getUnixSeconds() {
 }
 
 function getZermeloDomain() {
-    return "https://" + encodeURIComponent(schoolName) + ".zportal.nl/api";
+    return "https://" + encodeURI(schoolName) + ".zportal.nl/api/v3";
 }
 
 function readApiResponse(response) {

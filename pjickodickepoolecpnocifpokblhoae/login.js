@@ -18,8 +18,8 @@ document.addEventListener("DOMContentLoaded", () => {
     loginButton.addEventListener("click", async () => {
         const loginCode = loginCodeElement.value.trim();
         const schoolName = schoolNameElement.value.trim();
-
         errorText.hidden = true;
+
         if(!schoolName || loginCode.length !== 12) {
             errorText.textContent = "Vul je schoolnaam en de 12-cijferige login code in.";
             errorText.hidden = false;
@@ -29,17 +29,19 @@ document.addEventListener("DOMContentLoaded", () => {
         loginButton.disabled = true;
         try {
             const tokenResponse = await fetch(
-                "https://" + encodeURIComponent(schoolName) + ".zportal.nl/api/oauth/token?code=" + encodeURIComponent(loginCode),
+                "https://" + encodeURI(schoolName) + ".zportal.nl/api/v2/oauth/token",
                 {
                     method: "POST",
-                    headers: {"Accept": "application/json"}
+                    headers: {"Content-Type": "application/x-www-form-urlencoded"},
+                    body: "grant_type=authorization_code&code=" + encodeURIComponent(loginCode)
                 }
             );
             const tokenPayload = await readApiResponse(tokenResponse);
-            const accessToken = findToken(tokenPayload);
-            if(!accessToken) throw new Error("De API gaf geen token terug.");
+            const accessToken = tokenPayload.access_token;
+            if(!accessToken) throw new Error("Zermelo gaf geen access token terug.");
 
-            await saveData(schoolName, accessToken, {firstName: "daar", lastName: ""});
+            const userInfo = await getUserInfo(schoolName, accessToken);
+            await saveData(schoolName, accessToken, userInfo);
         } catch(error) {
             console.error("Login failed:", error);
             errorText.textContent = error.message || "Inloggen mislukt, probeer het opnieuw.";
@@ -63,42 +65,22 @@ function setTheme(theme) {
 
 async function readApiResponse(response) {
     const payload = await response.json().catch(() => ({}));
-    if(!response.ok || Number(payload.response?.status) >= 400) {
-        throw new Error(getApiErrorMessage(payload, response.status));
+    if(!response.ok) {
+        const message = payload.message || payload.error_description || payload.error
+            || payload.response?.message;
+        throw new Error(message || `API-fout (${response.status})`);
     }
     return payload;
 }
 
-function getApiErrorMessage(payload, status) {
-    const response = payload?.response || {};
-    const message = response.message || payload?.message || payload?.error_description || payload?.error;
-    const details = response.details || payload?.details;
-    if(message && details && details !== message) {
-        return `${message} (${details})`;
-    }
-    if(message) return message;
-    if(status === 400) {
-        return "De login code is ongeldig, verlopen of al eerder gebruikt. Vraag een nieuwe Zermelo-authcode aan.";
-    }
-    return `API-fout (${status})`;
-}
-
-function findToken(value) {
-    if(!value || typeof value !== "object") return null;
-    for(const [key, child] of Object.entries(value)) {
-        if(/^(access[_-]?token|accesstoken|token)$/i.test(key)
-            && typeof child === "string" && child.length > 10) {
-            return child.replace(/^Bearer\s+/i, "");
-        }
-        const nestedToken = findToken(child);
-        if(nestedToken) return nestedToken;
-    }
-    return null;
-}
-
-function redirectMain() {
-    chrome.action.setPopup({popup: "popup.html"});
-    window.location.href = "popup.html";
+async function getUserInfo(siteName, accessToken) {
+    const url = "https://" + encodeURI(siteName)
+        + ".zportal.nl/api/v3/users/~me?access_token=" + encodeURIComponent(accessToken);
+    const payload = await readApiResponse(await fetch(url));
+    const data = payload.response?.data?.[0];
+    if(!data) throw new Error("De gebruikersgegevens konden niet worden opgehaald.");
+    data.fullName = data.firstName + " " + data.lastName;
+    return data;
 }
 
 function saveData(schoolName, accessToken, userInfo) {
@@ -108,7 +90,8 @@ function saveData(schoolName, accessToken, userInfo) {
                 reject(new Error(chrome.runtime.lastError.message));
                 return;
             }
-            redirectMain();
+            chrome.action.setPopup({popup: "popup.html"});
+            window.location.href = "popup.html";
             resolve();
         });
     });
