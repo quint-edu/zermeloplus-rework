@@ -30,7 +30,10 @@ document.addEventListener("DOMContentLoaded", () => {
         try {
             const tokenResponse = await fetch(
                 "https://" + encodeURIComponent(schoolName) + ".zportal.nl/api/oauth/token?code=" + encodeURIComponent(loginCode),
-                {method: "POST"}
+                {
+                    method: "POST",
+                    headers: {"Accept": "application/json"}
+                }
             );
             const tokenPayload = await readApiResponse(tokenResponse);
             const accessToken = findToken(tokenPayload);
@@ -65,9 +68,23 @@ function setTheme(theme) {
 async function readApiResponse(response) {
     const payload = await response.json().catch(() => ({}));
     if(!response.ok) {
-        throw new Error(payload.message || payload.error || `API-fout (${response.status})`);
+        throw new Error(getApiErrorMessage(payload, response.status));
     }
     return payload;
+}
+
+function getApiErrorMessage(payload, status) {
+    const response = payload?.response || {};
+    const message = response.message || payload?.message || payload?.error_description || payload?.error;
+    const details = response.details || payload?.details;
+    if(message && details && details !== message) {
+        return `${message} (${details})`;
+    }
+    if(message) return message;
+    if(status === 400) {
+        return "De login code is ongeldig, verlopen of al eerder gebruikt. Vraag een nieuwe Zermelo-authcode aan.";
+    }
+    return `API-fout (${status})`;
 }
 
 function findToken(value) {
