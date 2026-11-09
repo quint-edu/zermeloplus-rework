@@ -18,6 +18,12 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
+    const handleLogin = event => {
+        if(event) event.preventDefault();
+        submitLogin();
+    };
+
+    loginButton.addEventListener("click", handleLogin);
     form.addEventListener("submit", event => {
         event.preventDefault();
         submitLogin();
