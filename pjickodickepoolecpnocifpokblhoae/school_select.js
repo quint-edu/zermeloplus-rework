@@ -1,5 +1,6 @@
 let accessToken = null;
 let schoolName = null;
+let usesUserProjects = false;
 
 document.addEventListener("DOMContentLoaded", () => {
     initTheme();
@@ -24,12 +25,18 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         try {
-            const schools = await getSchools();
-            schools.forEach(school => schoolSelect.add(new Option(school.name, school.id)));
-            if(schools.length === 0) throw new Error("Geen scholen gevonden.");
-
-            await onSchoolSelect(schoolSelect, yearSelect);
-            schoolSelect.addEventListener("change", () => onSchoolSelect(schoolSelect, yearSelect));
+            try {
+                const schools = await getSchools();
+                schools.forEach(school => schoolSelect.add(new Option(school.name, school.id)));
+                if(schools.length === 0) throw new Error("Geen scholen gevonden.");
+                await onSchoolSelect(schoolSelect, yearSelect);
+            } catch(error) {
+                if(!isPartnerOnlyError(error)) throw error;
+                await loadProjectsFromUser(schoolSelect, yearSelect);
+            }
+            schoolSelect.addEventListener("change", () => {
+                if(!usesUserProjects) onSchoolSelect(schoolSelect, yearSelect);
+            });
             continueButton.addEventListener("click", () => {
                 if(!yearSelect.value) return;
                 continueButton.disabled = true;
@@ -42,7 +49,7 @@ document.addEventListener("DOMContentLoaded", () => {
             schoolSelect.disabled = true;
             yearSelect.disabled = true;
             continueButton.disabled = true;
-            loginAgainButton.hidden = true;
+            loginAgainButton.hidden = !isPartnerOnlyError(error);
         }
     });
 });
@@ -86,6 +93,46 @@ async function onSchoolSelect(schoolSelect, yearSelect) {
     const years = payload.response.data.slice().sort((a, b) => b.year - a.year);
     yearSelect.replaceChildren(...years.filter(year => !year.archived)
         .map(year => new Option(year.name, year.id)));
+}
+
+async function loadProjectsFromUser(schoolSelect, yearSelect) {
+    usesUserProjects = true;
+    const payload = await readApiResponse(await fetch(
+        "https://" + encodeURI(schoolName) + ".zportal.nl/api/v3/users/~me?access_token="
+        + encodeURIComponent(accessToken)
+    ));
+    const user = payload.response?.data?.[0];
+    const projects = [
+        ...(user?.studentSchoolInSchoolYears || []),
+        ...(user?.schoolInSchoolYears || []),
+        ...(user?.employeeSchoolInSchoolYears || [])
+    ].map(project => normalizeProject(project)).filter(project => project.id);
+
+    if(projects.length === 0) {
+        throw new Error("Zermelo blokkeert de schoollijst voor deze token. Gebruik een nieuwe partner-authcode of vraag de schoolbeheerder om partnerrechten.");
+    }
+
+    schoolSelect.replaceChildren(new Option(schoolName, schoolName));
+    yearSelect.replaceChildren(...projects.map(project =>
+        new Option(project.label, project.id)
+    ));
+}
+
+function normalizeProject(project) {
+    if(typeof project === "string" || typeof project === "number") {
+        return {id: String(project), label: "Rooster " + project};
+    }
+    const id = project?.id || project?.schoolInSchoolYear || project?.schoolInSchoolYearId;
+    const year = project?.year || project?.schoolYear || project?.schoolyear;
+    return {
+        id: id ? String(id) : "",
+        label: project?.name || project?.schoolInSchoolYearName
+            || (year ? "Schooljaar " + year : "Roosterproject")
+    };
+}
+
+function isPartnerOnlyError(error) {
+    return /alleen.*partners|partners?.*opgevraagd|partner-only/i.test(error?.message || "");
 }
 
 async function readApiResponse(response) {
