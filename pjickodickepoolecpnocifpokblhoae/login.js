@@ -41,8 +41,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const accessToken = tokenPayload.access_token;
             if(!accessToken) throw new Error("Zermelo gaf geen access token terug.");
 
-            const userInfo = await getUserInfo(schoolName, accessToken);
-            await saveData(schoolName, accessToken, userInfo);
+            await saveData(schoolName, accessToken, {firstName: ""});
         } catch(error) {
             console.error("Login failed:", error);
             errorText.textContent = error.message || "Inloggen mislukt, probeer het opnieuw.";
@@ -74,16 +73,6 @@ async function readApiResponse(response) {
     return payload;
 }
 
-async function getUserInfo(siteName, accessToken) {
-    const url = "https://" + encodeURI(siteName)
-        + ".zportal.nl/api/v3/users/~me?access_token=" + encodeURIComponent(accessToken);
-    const payload = await readApiResponse(await fetch(url));
-    const data = payload.response?.data?.[0];
-    if(!data) throw new Error("De gebruikersgegevens konden niet worden opgehaald.");
-    data.fullName = data.firstName + " " + data.lastName;
-    return data;
-}
-
 function saveData(schoolName, accessToken, userInfo) {
     return new Promise((resolve, reject) => {
         chrome.storage.sync.remove(["schoolYear"], () => {
@@ -96,8 +85,8 @@ function saveData(schoolName, accessToken, userInfo) {
                     reject(new Error(chrome.runtime.lastError.message));
                     return;
                 }
-                chrome.action.setPopup({popup: "popup.html"});
-                window.location.href = "popup.html";
+                chrome.action.setPopup({popup: "school_select.html"});
+                window.location.href = "school_select.html";
                 resolve();
             });
         });
