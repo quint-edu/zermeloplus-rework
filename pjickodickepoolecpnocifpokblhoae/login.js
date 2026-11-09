@@ -67,19 +67,19 @@ async function readApiResponse(response) {
     if(!response.ok) {
         throw new Error(payload.message || payload.error || `API-fout (${response.status})`);
     }
-
-    function findToken(value) {
-        if(!value || typeof value !== "object") return null;
-        for(const [key, child] of Object.entries(value)) {
-            if(/^(access_)?token$/i.test(key) && typeof child === "string" && child.length > 10) {
-                return child.replace(/^Bearer\s+/i, "");
-            }
-            const nestedToken = findToken(child);
-            if(nestedToken) return nestedToken;
-        }
-        return null;
-    }
     return payload;
+}
+
+function findToken(value) {
+    if(!value || typeof value !== "object") return null;
+    for(const [key, child] of Object.entries(value)) {
+        if(/^(access_)?token$/i.test(key) && typeof child === "string" && child.length > 10) {
+            return child.replace(/^Bearer\s+/i, "");
+        }
+        const nestedToken = findToken(child);
+        if(nestedToken) return nestedToken;
+    }
+    return null;
 }
 
 function redirectMain() {
