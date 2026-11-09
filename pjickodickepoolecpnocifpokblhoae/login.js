@@ -60,8 +60,19 @@ async function submitLogin({loginCode, schoolName, loginButton, errorText}) {
         const accessToken = tokenPayload.access_token;
         if(!accessToken) throw new Error("Zermelo gaf geen access token terug.");
 
-        const userInfo = await getUserInfo(normalizedSchool, accessToken);
-        await saveData(normalizedSchool, accessToken, userInfo);
+        // The auth code is single-use. Persist the token before making any
+        // additional API request so a profile failure cannot lose the login.
+        const fallbackUserInfo = {firstName: "daar", lastName: ""};
+        await storeData(normalizedSchool, accessToken, fallbackUserInfo);
+
+        try {
+            const userInfo = await getUserInfo(normalizedSchool, accessToken);
+            await storeData(normalizedSchool, accessToken, userInfo);
+        } catch(error) {
+            console.warn("User profile unavailable; continuing with token:", error);
+        }
+
+        redirectMain();
     } catch(error) {
         console.error("Login failed:", error);
         errorText.textContent = error.message || "Inloggen mislukt, probeer het opnieuw.";
@@ -102,16 +113,19 @@ async function getUserInfo(siteName, accessToken) {
     return data;
 }
 
-function saveData(schoolName, accessToken, userInfo) {
+function storeData(schoolName, accessToken, userInfo) {
     return new Promise((resolve, reject) => {
         chrome.storage.sync.set({accessToken, schoolName, userInfo}, () => {
             if(chrome.runtime.lastError) {
                 reject(new Error(chrome.runtime.lastError.message));
                 return;
             }
-            chrome.action.setPopup({popup: "popup.html"});
-            window.location.href = "popup.html";
             resolve();
         });
     });
+}
+
+function redirectMain() {
+    chrome.action.setPopup({popup: "popup.html"});
+    window.location.href = "popup.html";
 }
