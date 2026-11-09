@@ -60,7 +60,7 @@ document.addEventListener("DOMContentLoaded", () => {
             } catch(error) {
                 console.warn("Gebruikersprofiel kon niet worden geladen:", error);
             }
-            redirectMain();
+            redirectSchoolSelect();
         } catch(error) {
             console.error("Login failed:", error);
             errorText.textContent = error.message || "Inloggen mislukt, probeer het opnieuw.";
@@ -87,6 +87,11 @@ function redirectMain() {
     window.location.href = "popup.html";
 }
 
+function redirectSchoolSelect() {
+    chrome.action.setPopup({popup: "school_select.html"});
+    window.location.href = "school_select.html";
+}
+
 function readApiResponse(response) {
     return response.json().catch(() => ({})).then(payload => {
         if(!response.ok) {
@@ -101,12 +106,18 @@ function readApiResponse(response) {
 
 function saveData(schoolName, accessToken, userInfo) {
     return new Promise((resolve, reject) => {
-        chrome.storage.sync.set({accessToken, schoolName, userInfo}, () => {
+        chrome.storage.sync.remove(["schoolYear"], () => {
             if(chrome.runtime.lastError) {
                 reject(new Error(chrome.runtime.lastError.message));
                 return;
             }
-            resolve();
+            chrome.storage.sync.set({accessToken, schoolName, userInfo}, () => {
+                if(chrome.runtime.lastError) {
+                    reject(new Error(chrome.runtime.lastError.message));
+                    return;
+                }
+                resolve();
+            });
         });
     });
 }
