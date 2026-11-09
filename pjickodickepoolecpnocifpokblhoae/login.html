@@ -11,7 +11,7 @@
                 <div class="brand"><img src="logo.png" alt=""><div><p class="eyebrow">Zermelo++</p><span class="muted">Je rooster, direct bij de hand</span></div></div>
                 <select class="theme-select" id="theme-select" aria-label="Thema"><option value="system">Auto</option><option value="light">Licht</option><option value="dark">Donker</option></select>
             </header>
-            <section class="panel">
+            <form class="panel" id="login-form">
                 <h1>Welkom terug</h1>
                 <p class="intro">Log in om je rooster te bekijken.</p>
                 <p id="error-msg" hidden>Inloggen mislukt, probeer het opnieuw.</p>
@@ -20,8 +20,8 @@
                 <label class="field-label" for="login-code">Login code</label>
                 <input class="field" id="login-code" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="12 cijfers">
                 <a id="auto-fill-btn" hidden href="#">Klik hier om automatisch in te vullen</a>
-                <button id="login-btn" type="button">Inloggen</button>
-            </section>
+                <button id="login-btn" type="submit">Inloggen</button>
+            </form>
         </main>
 
         <script src="login.js"></script>

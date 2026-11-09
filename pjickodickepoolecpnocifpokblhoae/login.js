@@ -1,55 +1,74 @@
-document.addEventListener("DOMContentLoaded", () => {
+function initializeLogin() {
     initTheme();
 
+    const form = document.getElementById("login-form");
     const loginCodeElement = document.getElementById("login-code");
     const schoolNameElement = document.getElementById("school-name");
     const loginButton = document.getElementById("login-btn");
     const errorText = document.getElementById("error-msg");
+    const themeSelect = document.getElementById("theme-select");
 
-    document.getElementById("theme-select").addEventListener("change", event => {
+    if(!form || !loginCodeElement || !schoolNameElement || !loginButton || !errorText || !themeSelect) {
+        console.error("Login UI is incomplete.");
+        return;
+    }
+
+    themeSelect.addEventListener("change", event => {
         setTheme(event.target.value);
         chrome.storage.sync.set({theme: event.target.value});
     });
 
-    loginCodeElement.addEventListener("input", () => {
-        loginCodeElement.value = loginCodeElement.value.replace(/\D/g, "").slice(0, 12);
+    form.addEventListener("submit", event => {
+        event.preventDefault();
+        submitLogin({
+            loginCode: loginCodeElement.value,
+            schoolName: schoolNameElement.value,
+            loginButton,
+            errorText
+        });
     });
+}
 
-    loginButton.addEventListener("click", async () => {
-        const loginCode = loginCodeElement.value.trim();
-        const schoolName = schoolNameElement.value.trim();
-        errorText.hidden = true;
+if(document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initializeLogin, {once: true});
+} else {
+    initializeLogin();
+}
 
-        if(!schoolName || loginCode.length !== 12) {
-            errorText.textContent = "Vul je schoolnaam en de 12-cijferige login code in.";
-            errorText.hidden = false;
-            return;
-        }
+async function submitLogin({loginCode, schoolName, loginButton, errorText}) {
+    const normalizedCode = loginCode.replace(/\s/g, "");
+    const normalizedSchool = schoolName.trim();
+    errorText.hidden = true;
 
-        loginButton.disabled = true;
-        try {
-            const tokenResponse = await fetch(
-                "https://" + encodeURI(schoolName) + ".zportal.nl/api/v2/oauth/token",
-                {
-                    method: "POST",
-                    headers: {"Content-Type": "application/x-www-form-urlencoded"},
-                    body: "grant_type=authorization_code&code=" + encodeURIComponent(loginCode)
-                }
-            );
-            const tokenPayload = await readApiResponse(tokenResponse);
-            const accessToken = tokenPayload.access_token;
-            if(!accessToken) throw new Error("Zermelo gaf geen access token terug.");
+    if(!normalizedSchool || !/^\d{12}$/.test(normalizedCode)) {
+        errorText.textContent = "Vul je schoolnaam en de 12-cijferige login code in.";
+        errorText.hidden = false;
+        return;
+    }
 
-            const userInfo = await getUserInfo(schoolName, accessToken);
-            await saveData(schoolName, accessToken, userInfo);
-        } catch(error) {
-            console.error("Login failed:", error);
-            errorText.textContent = error.message || "Inloggen mislukt, probeer het opnieuw.";
-            errorText.hidden = false;
-            loginButton.disabled = false;
-        }
-    });
-});
+    loginButton.disabled = true;
+    try {
+        const tokenResponse = await fetch(
+            "https://" + encodeURI(normalizedSchool) + ".zportal.nl/api/v2/oauth/token",
+            {
+                method: "POST",
+                headers: {"Content-Type": "application/x-www-form-urlencoded"},
+                body: "grant_type=authorization_code&code=" + encodeURIComponent(normalizedCode)
+            }
+        );
+        const tokenPayload = await readApiResponse(tokenResponse);
+        const accessToken = tokenPayload.access_token;
+        if(!accessToken) throw new Error("Zermelo gaf geen access token terug.");
+
+        const userInfo = await getUserInfo(normalizedSchool, accessToken);
+        await saveData(normalizedSchool, accessToken, userInfo);
+    } catch(error) {
+        console.error("Login failed:", error);
+        errorText.textContent = error.message || "Inloggen mislukt, probeer het opnieuw.";
+        errorText.hidden = false;
+        loginButton.disabled = false;
+    }
+}
 
 function initTheme() {
     chrome.storage.sync.get(["theme"], result => setTheme(result.theme || "system"));
