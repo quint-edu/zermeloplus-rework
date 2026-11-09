@@ -39,12 +39,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const accessToken = findToken(tokenPayload);
             if(!accessToken) throw new Error("De API gaf geen token terug.");
 
-            await validatePartnerToken(schoolName, accessToken);
-            const userInfo = await getUserInfo(schoolName, accessToken).catch(() => ({
-                firstName: "daar",
-                lastName: ""
-            }));
-            await saveData(schoolName, accessToken, userInfo);
+            await saveData(schoolName, accessToken, {firstName: "daar", lastName: ""});
         } catch(error) {
             console.error("Login failed:", error);
             errorText.textContent = error.message || "Inloggen mislukt, probeer het opnieuw.";
@@ -88,47 +83,6 @@ function getApiErrorMessage(payload, status) {
     return `API-fout (${status})`;
 }
 
-async function validatePartnerToken(siteName, token) {
-    const result = await authenticatedRequest(
-        "https://" + encodeURIComponent(siteName) + ".zportal.nl/api/partners/~me",
-        token
-    );
-    if(!result.payload || typeof result.payload !== "object") {
-        throw new Error("Zermelo gaf geen geldige rechteninformatie terug.");
-    }
-}
-
-async function authenticatedRequest(url, token) {
-    const headers = [
-        {Authorization: token},
-        {Authorization: "Bearer " + stripBearer(token)},
-        {Authorization: "Token " + stripBearer(token)}
-    ];
-    let lastResponse = null;
-    let lastPayload = {};
-
-    for(const requestHeaders of headers) {
-        const response = await fetch(url, {headers: requestHeaders});
-        const payload = await response.json().catch(() => ({}));
-        lastResponse = response;
-        lastPayload = payload;
-        if(response.ok && Number(payload.response?.status || 200) < 400) {
-            return {response, payload};
-        }
-        if(response.status !== 401 && response.status !== 403
-            && Number(payload.response?.status) !== 401
-            && Number(payload.response?.status) !== 403) {
-            break;
-        }
-    }
-
-    throw new Error(getApiErrorMessage(lastPayload, lastResponse?.status || 401));
-}
-
-function stripBearer(token) {
-    return String(token).replace(/^(Bearer|Token)\s+/i, "");
-}
-
 function findToken(value) {
     if(!value || typeof value !== "object") return null;
     for(const [key, child] of Object.entries(value)) {
@@ -158,14 +112,4 @@ function saveData(schoolName, accessToken, userInfo) {
             resolve();
         });
     });
-}
-
-async function getUserInfo(siteName, accessToken) {
-    const url = "https://" + encodeURIComponent(siteName)
-        + ".zportal.nl/api/users/~me?fields=firstName,lastName,userCode";
-    const {payload} = await authenticatedRequest(url, accessToken);
-    const data = payload.response?.data?.[0] || payload.data?.[0] || payload.data || payload;
-    if(!data?.firstName) throw new Error("De gebruikersgegevens konden niet worden opgehaald.");
-    data.fullName = [data.firstName, data.lastName].filter(Boolean).join(" ");
-    return data;
 }

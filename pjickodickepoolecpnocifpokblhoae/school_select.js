@@ -76,29 +76,18 @@ function redirectMain() {
 
 async function apiRequest(path) {
     const url = "https://" + encodeURIComponent(schoolName) + ".zportal.nl/api" + path;
-    const headers = [
-        {Authorization: accessToken},
-        {Authorization: "Bearer " + stripBearer(accessToken)},
-        {Authorization: "Token " + stripBearer(accessToken)}
-    ];
-    let response;
-    let payload;
-
-    for(const requestHeaders of headers) {
-        response = await fetch(url, {headers: requestHeaders});
-        payload = await response.json().catch(() => ({}));
-        if(response.ok && Number(payload.response?.status || 200) < 400) {
-            return payload.response?.data || payload.data || payload.response || payload;
-        }
-        if(!isUnauthorized(response, payload)) break;
+    const response = await fetch(url, {headers: {Authorization: accessToken}});
+    const payload = await response.json().catch(() => ({}));
+    if(response.ok && Number(payload.response?.status || 200) < 400) {
+        return payload.response?.data || payload.data || payload.response || payload;
     }
 
     const error = new Error(
-        getApiErrorMessage(payload, response?.status)
+        getApiErrorMessage(payload, response.status)
     );
     if(isUnauthorized(response, payload)) {
         error.authenticated = false;
-        error.message = "Zermelo weigert het opgeslagen token. Log opnieuw in met een nieuwe authcode.";
+        error.message = "Zermelo weigert deze token. Log opnieuw in met een nieuwe authcode.";
     }
     throw error;
 }
@@ -119,10 +108,6 @@ function isUnauthorized(response, payload) {
         || /niet ingelogd|sessie.*verlopen|unauthori[sz]ed|invalid token|geen toegang/i.test(
             payload.response?.message || payload.response?.details || payload.message || payload.error || ""
         );
-}
-
-function stripBearer(token) {
-    return String(token).replace(/^Bearer\s+/i, "");
 }
 
 async function getProjects() {
