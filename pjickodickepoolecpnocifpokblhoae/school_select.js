@@ -76,34 +76,48 @@ function redirectMain() {
 
 async function apiRequest(path) {
     const url = "https://" + encodeURIComponent(schoolName) + ".zportal.nl/api" + path;
-    let response = await fetch(url, {headers: {Authorization: accessToken}});
-    let payload = await response.json().catch(() => ({}));
+    const headers = [
+        {Authorization: accessToken},
+        {Authorization: "Bearer " + stripBearer(accessToken)},
+        {Authorization: "Token " + stripBearer(accessToken)}
+    ];
+    let response;
+    let payload;
 
-    if(isUnauthorized(response, payload)) {
-        response = await fetch(url, {headers: {Authorization: "Bearer " + stripBearer(accessToken)}});
+    for(const requestHeaders of headers) {
+        response = await fetch(url, {headers: requestHeaders});
         payload = await response.json().catch(() => ({}));
-    }
-
-    if(!response.ok || Number(payload.response?.status) >= 400) {
-        const error = new Error(
-            payload.response?.message || payload.message || payload.error || `API-fout (${response.status})`
-        );
-        if(isUnauthorized(response, payload)) {
-            error.authenticated = false;
-            await chrome.storage.sync.remove(["accessToken", "userInfo", "schoolYear"]);
-            error.message = "U bent niet ingelogd, of uw sessie is verlopen.";
+        if(response.ok && Number(payload.response?.status || 200) < 400) {
+            return payload.response?.data || payload.data || payload.response || payload;
         }
-        throw error;
+        if(!isUnauthorized(response, payload)) break;
     }
 
-    return payload.response?.data || payload.data || payload.response || payload;
+    const error = new Error(
+        getApiErrorMessage(payload, response?.status)
+    );
+    if(isUnauthorized(response, payload)) {
+        error.authenticated = false;
+        error.message = "Zermelo weigert het opgeslagen token. Log opnieuw in met een nieuwe authcode.";
+    }
+    throw error;
+}
+
+function getApiErrorMessage(payload, status) {
+    const response = payload?.response || {};
+    const message = response.message || payload?.message || payload?.error_description || payload?.error;
+    const details = response.details || payload?.details;
+    if(message && details && details !== message) return `${message} (${details})`;
+    return message || `API-fout (${status || "onbekend"})`;
 }
 
 function isUnauthorized(response, payload) {
     return response.status === 401
+        || response.status === 403
         || Number(payload.response?.status) === 401
-        || /niet ingelogd|sessie.*verlopen|unauthori[sz]ed|invalid token/i.test(
-            payload.response?.message || payload.message || payload.error || ""
+        || Number(payload.response?.status) === 403
+        || /niet ingelogd|sessie.*verlopen|unauthori[sz]ed|invalid token|geen toegang/i.test(
+            payload.response?.message || payload.response?.details || payload.message || payload.error || ""
         );
 }
 
