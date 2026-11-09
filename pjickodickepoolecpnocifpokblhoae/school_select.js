@@ -13,7 +13,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const yearSelect = document.getElementById("year-select");
     const continueButton = document.getElementById("continue-btn");
     const errorMessage = document.getElementById("error-msg");
+    const loginAgainButton = document.getElementById("login-again-btn");
 
+    loginAgainButton.addEventListener("click", redirectLogin);
     chrome.storage.sync.get(["accessToken", "schoolName"], async result => {
         accessToken = result.accessToken;
         schoolName = result.schoolName;
@@ -42,6 +44,9 @@ document.addEventListener("DOMContentLoaded", () => {
             schoolSelect.disabled = true;
             yearSelect.disabled = true;
             continueButton.disabled = true;
+            if(error.authenticated === false) {
+                loginAgainButton.hidden = false;
+            }
         }
     });
 });
@@ -59,6 +64,7 @@ function setTheme(theme) {
 }
 
 function redirectLogin() {
+    chrome.storage.sync.remove(["accessToken", "userInfo", "schoolYear"]);
     chrome.action.setPopup({popup: "login.html"});
     window.location.href = "login.html";
 }
@@ -69,14 +75,40 @@ function redirectMain() {
 }
 
 async function apiRequest(path) {
-    const response = await fetch("https://" + encodeURIComponent(schoolName) + ".zportal.nl/api" + path, {
-        headers: {Authorization: accessToken}
-    });
-    const payload = await response.json().catch(() => ({}));
-    if(!response.ok) {
-        throw new Error(payload.response?.message || payload.message || payload.error || `API-fout (${response.status})`);
+    const url = "https://" + encodeURIComponent(schoolName) + ".zportal.nl/api" + path;
+    let response = await fetch(url, {headers: {Authorization: accessToken}});
+    let payload = await response.json().catch(() => ({}));
+
+    if(isUnauthorized(response, payload)) {
+        response = await fetch(url, {headers: {Authorization: "Bearer " + stripBearer(accessToken)}});
+        payload = await response.json().catch(() => ({}));
     }
+
+    if(!response.ok || Number(payload.response?.status) >= 400) {
+        const error = new Error(
+            payload.response?.message || payload.message || payload.error || `API-fout (${response.status})`
+        );
+        if(isUnauthorized(response, payload)) {
+            error.authenticated = false;
+            await chrome.storage.sync.remove(["accessToken", "userInfo", "schoolYear"]);
+            error.message = "U bent niet ingelogd, of uw sessie is verlopen.";
+        }
+        throw error;
+    }
+
     return payload.response?.data || payload.data || payload.response || payload;
+}
+
+function isUnauthorized(response, payload) {
+    return response.status === 401
+        || Number(payload.response?.status) === 401
+        || /niet ingelogd|sessie.*verlopen|unauthori[sz]ed|invalid token/i.test(
+            payload.response?.message || payload.message || payload.error || ""
+        );
+}
+
+function stripBearer(token) {
+    return String(token).replace(/^Bearer\s+/i, "");
 }
 
 async function getProjects() {

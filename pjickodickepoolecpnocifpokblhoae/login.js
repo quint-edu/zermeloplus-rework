@@ -33,11 +33,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 {method: "POST"}
             );
             const tokenPayload = await readApiResponse(tokenResponse);
-            const accessToken = tokenPayload.access_token
-                || tokenPayload.token
-                || tokenPayload.response?.access_token
-                || tokenPayload.response?.data?.[0]?.access_token
-                || tokenPayload.response?.data?.[0]?.token;
+            const accessToken = findToken(tokenPayload);
             if(!accessToken) throw new Error("De API gaf geen token terug.");
 
             const userInfo = await getUserInfo(schoolName, accessToken).catch(error => {
@@ -70,6 +66,18 @@ async function readApiResponse(response) {
     const payload = await response.json().catch(() => ({}));
     if(!response.ok) {
         throw new Error(payload.message || payload.error || `API-fout (${response.status})`);
+    }
+
+    function findToken(value) {
+        if(!value || typeof value !== "object") return null;
+        for(const [key, child] of Object.entries(value)) {
+            if(/^(access_)?token$/i.test(key) && typeof child === "string" && child.length > 10) {
+                return child.replace(/^Bearer\s+/i, "");
+            }
+            const nestedToken = findToken(child);
+            if(nestedToken) return nestedToken;
+        }
+        return null;
     }
     return payload;
 }
