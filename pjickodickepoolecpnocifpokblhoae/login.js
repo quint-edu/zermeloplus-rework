@@ -1,7 +1,6 @@
 document.addEventListener("DOMContentLoaded", () => {
     initTheme();
 
-    const form = document.getElementById("login-form");
     const loginCodeElement = document.getElementById("login-code");
     const schoolNameElement = document.getElementById("school-name");
     const loginButton = document.getElementById("login-btn");
@@ -12,29 +11,17 @@ document.addEventListener("DOMContentLoaded", () => {
         chrome.storage.sync.set({theme: event.target.value});
     });
 
-    loginCodeElement.addEventListener("keypress", event => {
-        if(loginCodeElement.value.length >= 12 || isLetter(event.keyCode)) {
-            event.preventDefault();
-        }
+    loginCodeElement.addEventListener("input", () => {
+        loginCodeElement.value = loginCodeElement.value.replace(/\D/g, "").slice(0, 12);
     });
 
-    const handleLogin = event => {
-        if(event) event.preventDefault();
-        submitLogin();
-    };
-
-    loginButton.addEventListener("click", handleLogin);
-    form.addEventListener("submit", event => {
+    loginButton.addEventListener("click", async event => {
         event.preventDefault();
-        submitLogin();
-    });
-
-    async function submitLogin() {
-        const loginCode = loginCodeElement.value.replace(/\s/g, "");
+        const loginCode = loginCodeElement.value.trim();
         const schoolName = schoolNameElement.value.trim();
         errorText.hidden = true;
 
-        if(!schoolName || !/^\d{12}$/.test(loginCode)) {
+        if(!schoolName || loginCode.length !== 12) {
             errorText.textContent = "Vul je schoolnaam en de 12-cijferige login code in.";
             errorText.hidden = false;
             return;
@@ -42,32 +29,27 @@ document.addEventListener("DOMContentLoaded", () => {
 
         loginButton.disabled = true;
         try {
-            const response = await fetch(
-                "https://" + encodeURIComponent(schoolName) + ".zportal.nl/api/v2/oauth/token",
+            const tokenResponse = await fetch(
+                "https://" + encodeURI(schoolName) + ".zportal.nl/api/v2/oauth/token",
                 {
                     method: "POST",
                     headers: {"Content-Type": "application/x-www-form-urlencoded"},
-                    body: "grant_type=authorization_code&code=" + encodeURIComponent(loginCode)
+                    body: "grant_type=authorization_code&code=" + encodeURI(loginCode)
                 }
             );
-            const payload = await readApiResponse(response);
-            if(!payload.access_token) throw new Error("Zermelo gaf geen toegangstoken terug.");
+            const tokenPayload = await readApiResponse(tokenResponse);
+            const accessToken = tokenPayload.access_token;
+            if(!accessToken) throw new Error("Zermelo gaf geen access token terug.");
 
-            await saveData(schoolName, payload.access_token, {firstName: "", lastName: ""});
-            try {
-                const userInfo = await getUserInfo(schoolName, payload.access_token);
-                await saveData(schoolName, payload.access_token, userInfo);
-            } catch(error) {
-                console.warn("Gebruikersprofiel kon niet worden geladen:", error);
-            }
-            redirectSchoolSelect();
+            const userInfo = await getUserInfo(schoolName, accessToken);
+            await saveData(schoolName, accessToken, userInfo);
         } catch(error) {
             console.error("Login failed:", error);
             errorText.textContent = error.message || "Inloggen mislukt, probeer het opnieuw.";
             errorText.hidden = false;
             loginButton.disabled = false;
         }
-    }
+    });
 });
 
 function initTheme() {
@@ -82,26 +64,24 @@ function setTheme(theme) {
     document.getElementById("theme-select").value = theme;
 }
 
-function redirectMain() {
-    chrome.action.setPopup({popup: "popup.html"});
-    window.location.href = "popup.html";
+async function readApiResponse(response) {
+    const payload = await response.json().catch(() => ({}));
+    if(!response.ok) {
+        const message = payload.message || payload.error_description || payload.error
+            || payload.response?.message;
+        throw new Error(message || `API-fout (${response.status})`);
+    }
+    return payload;
 }
 
-function redirectSchoolSelect() {
-    chrome.action.setPopup({popup: "school_select.html"});
-    window.location.href = "school_select.html";
-}
-
-function readApiResponse(response) {
-    return response.json().catch(() => ({})).then(payload => {
-        if(!response.ok) {
-            throw new Error(
-                payload.message || payload.error_description || payload.error
-                || payload.response?.message || `API-fout (${response.status})`
-            );
-        }
-        return payload;
-    });
+async function getUserInfo(siteName, accessToken) {
+    const url = "https://" + encodeURI(siteName)
+        + ".zportal.nl/api/v3/users/~me?access_token=" + encodeURIComponent(accessToken);
+    const payload = await readApiResponse(await fetch(url));
+    const data = payload.response?.data?.[0];
+    if(!data) throw new Error("De gebruikersgegevens konden niet worden opgehaald.");
+    data.fullName = data.firstName + " " + data.lastName;
+    return data;
 }
 
 function saveData(schoolName, accessToken, userInfo) {
@@ -116,23 +96,10 @@ function saveData(schoolName, accessToken, userInfo) {
                     reject(new Error(chrome.runtime.lastError.message));
                     return;
                 }
+                chrome.action.setPopup({popup: "popup.html"});
+                window.location.href = "popup.html";
                 resolve();
             });
         });
-    });
-}
-
-function isLetter(keyCode) {
-    return keyCode > 31 && (keyCode < 48 || keyCode > 57);
-}
-
-function getUserInfo(siteName, accessToken) {
-    const url = "https://" + encodeURIComponent(siteName)
-        + ".zportal.nl/api/v3/users/~me?access_token=" + encodeURIComponent(accessToken);
-    return fetch(url).then(readApiResponse).then(result => {
-        const data = result.response?.data?.[0];
-        if(!data) throw new Error("De gebruikersgegevens konden niet worden opgehaald.");
-        data.fullName = data.firstName + " " + data.lastName;
-        return data;
     });
 }

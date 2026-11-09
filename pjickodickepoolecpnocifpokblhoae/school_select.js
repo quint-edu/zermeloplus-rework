@@ -8,33 +8,42 @@ document.addEventListener("DOMContentLoaded", () => {
         chrome.storage.sync.set({theme: event.target.value});
     });
 
-    chrome.storage.sync.get(["accessToken", "schoolName"], function(result) {
+    const schoolSelect = document.getElementById("school-select");
+    const yearSelect = document.getElementById("year-select");
+    const continueButton = document.getElementById("continue-btn");
+    const errorMessage = document.getElementById("error-msg");
+    const loginAgainButton = document.getElementById("login-again-btn");
+    loginAgainButton.addEventListener("click", redirectLogin);
+
+    chrome.storage.sync.get(["accessToken", "schoolName"], async result => {
         accessToken = result.accessToken;
         schoolName = result.schoolName;
+        if(!accessToken || !schoolName) {
+            redirectLogin();
+            return;
+        }
 
-        const selectElement = document.getElementById("school-select");
-        const yearSelectElement = document.getElementById("year-select");
+        try {
+            const schools = await getSchools();
+            schools.forEach(school => schoolSelect.add(new Option(school.name, school.id)));
+            if(schools.length === 0) throw new Error("Geen scholen gevonden.");
 
-        getSchools().then(schools => {
-            schools.forEach(school => {
-                const option = document.createElement("option");
-                option.text = school.name;
-                option.value = school.id;
-                selectElement.add(option);
+            await onSchoolSelect(schoolSelect, yearSelect);
+            schoolSelect.addEventListener("change", () => onSchoolSelect(schoolSelect, yearSelect));
+            continueButton.addEventListener("click", () => {
+                if(!yearSelect.value) return;
+                continueButton.disabled = true;
+                chrome.storage.sync.set({schoolYear: yearSelect.value}, redirectMain);
             });
-
-            onSchoolSelect(selectElement, yearSelectElement);
-        });
-
-        selectElement.addEventListener("change", function() {
-            onSchoolSelect(selectElement, yearSelectElement);
-        });
-
-        document.getElementById("continue-btn").addEventListener("click", function() {
-            chrome.storage.sync.set({schoolYear: yearSelectElement.value}, function() {
-                redirectMain();
-            });
-        });
+        } catch(error) {
+            console.error("Unable to load schools:", error);
+            errorMessage.textContent = error.message || "De roosters konden niet worden geladen.";
+            errorMessage.hidden = false;
+            schoolSelect.disabled = true;
+            yearSelect.disabled = true;
+            continueButton.disabled = true;
+            loginAgainButton.hidden = true;
+        }
     });
 });
 
@@ -50,40 +59,41 @@ function setTheme(theme) {
     document.getElementById("theme-select").value = theme;
 }
 
+function redirectLogin() {
+    chrome.storage.sync.remove(["accessToken", "userInfo", "schoolYear"]);
+    chrome.action.setPopup({popup: "login.html"});
+    window.location.href = "login.html";
+}
+
 function redirectMain() {
     chrome.action.setPopup({popup: "popup.html"});
     window.location.href = "popup.html";
 }
 
-function onSchoolSelect(selectElement, yearSelectElement) {
-    getYears(selectElement.value).then(years => {
-        yearSelectElement.innerHTML = "";
-        years.forEach(year => {
-            if(year.archived) return;
-            const option = document.createElement("option");
-            option.text = year.name;
-            option.value = year.id;
-            yearSelectElement.add(option);
-        });
-    });
+async function getSchools() {
+    const payload = await readApiResponse(await fetch(
+        "https://" + encodeURI(schoolName) + ".zportal.nl/api/v3/schools?access_token="
+        + encodeURIComponent(accessToken)
+    ));
+    return payload.response.data;
 }
 
-function getSchools() {
-    return fetch("https://" + schoolName + ".zportal.nl/api/v3/schools?access_token=" + accessToken)
-        .then(response => response.json())
-        .then(result => result.response.data);
+async function onSchoolSelect(schoolSelect, yearSelect) {
+    const payload = await readApiResponse(await fetch(
+        "https://" + encodeURI(schoolName) + ".zportal.nl/api/v3/schoolsinschoolyears?access_token="
+        + encodeURIComponent(accessToken) + "&school=" + encodeURIComponent(schoolSelect.value)
+    ));
+    const years = payload.response.data.slice().sort((a, b) => b.year - a.year);
+    yearSelect.replaceChildren(...years.filter(year => !year.archived)
+        .map(year => new Option(year.name, year.id)));
 }
 
-function getYears(school) {
-    return fetch(
-        "https://" + schoolName + ".zportal.nl/api/v3/schoolsinschoolyears?access_token="
-        + accessToken + "&school=" + school
-    ).then(response => response.json())
-        .then(result => sortYears(result.response.data));
-}
-
-function sortYears(years) {
-    const byYear = years.slice();
-    byYear.sort((a, b) => b.year - a.year);
-    return byYear;
+async function readApiResponse(response) {
+    const payload = await response.json().catch(() => ({}));
+    if(!response.ok) {
+        const message = payload.message || payload.error_description || payload.error
+            || payload.response?.message;
+        throw new Error(message || `API-fout (${response.status})`);
+    }
+    return payload;
 }
