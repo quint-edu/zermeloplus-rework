@@ -14,7 +14,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const selectElement = document.getElementById("school-select");
         const yearSelectElement = document.getElementById("year-select");
-        const continueButton = document.getElementById("continue-btn");
 
         getSchools().then(schools => {
             schools.forEach(school => {
@@ -25,18 +24,16 @@ document.addEventListener("DOMContentLoaded", () => {
             });
 
             onSchoolSelect(selectElement, yearSelectElement);
-        }).catch(error => {
-            console.error("Could not load schools:", error);
-            document.getElementById("error-msg").textContent = error.message;
-            document.getElementById("error-msg").hidden = false;
         });
 
-        selectElement.addEventListener("change", () => {
+        selectElement.addEventListener("change", function() {
             onSchoolSelect(selectElement, yearSelectElement);
         });
 
-        continueButton.addEventListener("click", () => {
-            chrome.storage.sync.set({schoolYear: yearSelectElement.value}, redirectMain);
+        document.getElementById("continue-btn").addEventListener("click", function() {
+            chrome.storage.sync.set({schoolYear: yearSelectElement.value}, function() {
+                redirectMain();
+            });
         });
     });
 });
@@ -58,15 +55,6 @@ function redirectMain() {
     window.location.href = "popup.html";
 }
 
-function getSchools() {
-    return fetch(
-        "https://" + schoolName + ".zportal.nl/api/v3/schools?access_token=" + accessToken
-    ).then(response => {
-        if(!response.ok) throw new Error(response.statusText);
-        return response.json();
-    }).then(result => result.response.data);
-}
-
 function onSchoolSelect(selectElement, yearSelectElement) {
     getYears(selectElement.value).then(years => {
         yearSelectElement.innerHTML = "";
@@ -77,21 +65,21 @@ function onSchoolSelect(selectElement, yearSelectElement) {
             option.value = year.id;
             yearSelectElement.add(option);
         });
-    }).catch(error => {
-        console.error("Could not load school years:", error);
-        document.getElementById("error-msg").textContent = error.message;
-        document.getElementById("error-msg").hidden = false;
     });
+}
+
+function getSchools() {
+    return fetch("https://" + schoolName + ".zportal.nl/api/v3/schools?access_token=" + accessToken)
+        .then(response => response.json())
+        .then(result => result.response.data);
 }
 
 function getYears(school) {
     return fetch(
         "https://" + schoolName + ".zportal.nl/api/v3/schoolsinschoolyears?access_token="
         + accessToken + "&school=" + school
-    ).then(response => {
-        if(!response.ok) throw new Error(response.statusText);
-        return response.json();
-    }).then(result => sortYears(result.response.data));
+    ).then(response => response.json())
+        .then(result => sortYears(result.response.data));
 }
 
 function sortYears(years) {
